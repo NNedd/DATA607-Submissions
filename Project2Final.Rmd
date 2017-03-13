@@ -1,0 +1,661 @@
+---
+title: "Project2"
+author: "N Obieyisi and N Nedd"
+date: "March 9, 2017"
+output: 
+  html_document:
+    theme: cerulean  
+    highlight: tango  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if("tidyr" %in% rownames(installed.packages()) == FALSE) {install.packages("tidyr")}
+library(tidyr)
+if("dplyr" %in% rownames(installed.packages()) == FALSE) {install.packages("dplyr")}
+library(dplyr)
+if("rworldmap" %in% rownames(installed.packages()) == FALSE) {install.packages("rworldmap")}
+library(rworldmap)
+if("stringr" %in% rownames(installed.packages()) == FALSE) {install.packages("stringr")}
+library(stringr)
+if("DT" %in% rownames(installed.packages()) == FALSE) {install.packages("DT")}
+library(DT)
+if("data.table" %in% rownames(installed.packages()) == FALSE) {install.packages("data.table")}
+library(data.table)
+if("ggplot2" %in% rownames(installed.packages()) == FALSE) {install.packages("ggplot2")}
+library(ggplot2)
+if("sparkline" %in% rownames(installed.packages()) == FALSE) {install.packages("sparkline")}
+library(sparkline)
+```
+#Gini Values Worldwide
+
+![](ginidatapost.png)
+
+##Read in the data, which was downloaded from the reference and uploaded to github
+
+```{r readin, eval = TRUE}
+GiniData <- read.csv("https://raw.githubusercontent.com/NNedd/MSDA-Github-repository/master/Data607/Project2/Data_Extract_From_World_Development_Indicators/49d6d15c-fab2-4acf-b212-5d1c8222b8b8_Data.csv", stringsAsFactors = FALSE, na.strings = c("", ".."))
+head(GiniData)
+```
+
+
+##Select only the Country Name along with the GINI values from 2000 to 2014
+
+```{r selectdata, eval= TRUE}
+GiniData_part <- select(GiniData, Country.Code, Country.Name, X2000..YR2000.:X2014..YR2014.)
+head(GiniData_part)
+```
+
+##Change to long format, omit N/A values and sort
+
+```{r reformat, eval = TRUE}
+giniLong <- gather(GiniData_part,Year, Gini, X2000..YR2000.:X2014..YR2014.)
+#giniLong <- na.omit(giniLong)
+giniLong_sort <- arrange(giniLong, Country.Name)
+giniLong_sort <- na.omit(giniLong_sort)
+giniLong_sort$Year <- as.numeric(str_extract(giniLong_sort$Year, "[[:digit:]]{4}"))
+head(giniLong_sort)
+```
+##Display trend by country using sparkbars embedded in a table[^1]
+
+```{r trend_by_country, eval = TRUE}
+r <- range(giniLong_sort$Gini)
+
+#Setup sparkbars
+bar_string <- "type: 'bar', barColor: 'purple', negBarColor: 'green', highlightColor: 'grey'"
+cb_bar = JS(paste0("function (oSettings, json) { $('.spark:not(:has(canvas))').sparkline('html', { ", 
+    bar_string, " }); }"), collapse = "")
+
+#Indicate which columns will use sparkbars(the second in this case)
+table_columns <- list(list(targets = c(1), render = JS("function(data, type, full){ return '<span class=spark>' + data + '</span>' }")))
+
+trend_details <- 
+  giniLong_sort %>% 
+  group_by(Country.Name) %>% 
+  summarise(Trend = paste(Gini, collapse = ",")) 
+
+d1 <- datatable(trend_details, rownames = FALSE, options = list(columnDefs = table_columns,     fnDrawCallback = cb_bar))
+d1$dependencies <- append(d1$dependencies, htmlwidgets:::getDependency("sparkline"))
+d1
+
+```
+
+
+[^1]: This code was adapted from the following two sources: <https://leonawicz.github.io/HtmlWidgetExamples/ex_dt_sparkline.html> and <https://github.com/htmlwidgets/sparkline/issues/3> both accessed on March 12, 2017.
+
+
+**Azerbaijan shows an interesting trend.  There was high gini followed by many years of low gini then a spike again**
+```{r aze_look, eval = TRUE}
+AZE_data <- filter(giniLong_sort, Country.Code == "AZE")
+ggplot(AZE_data, aes(Year, Gini)) + geom_col()
+```
+
+
+##Summarise by country and find mean for each country
+```{r summary, eval = TRUE}
+giniLong_group <- group_by(giniLong_sort, Country.Code)
+giniSummary <- summarise(giniLong_group, mean(Gini))
+giniSummary_sort <- arrange(giniSummary, `mean(Gini)`)
+```
+
+###10 Highest/Lowest inequalities
+
+```{r bottom10, eval = TRUE}
+bottom10 <- head(giniSummary_sort,10)
+datatable(bottom10, caption = "Lowest Gini Values")
+
+top10 <- tail(giniSummary_sort, 10)
+datatable(top10, caption = "Highest Gini Values")
+```
+**The higher the gini value the less equality there is.  By the same token, the lower the gini value the greater equality there is**
+**Based on the tables above the lowest average gini over 2000 to 2014 is Azerbaijan (relative high equality in the country), and the highest is Botswana which signifies high inequality in the country** 
+
+```{r drawmap, eval= TRUE}
+#create a map-shaped window
+par(mai=c(0,0,0.2,0),xaxs="i",yaxs="i")
+#join to a coarse resolution map
+spdf <- joinCountryData2Map(giniSummary_sort, joinCode="ISO3", nameJoinColumn="Country.Code")
+
+mapCountryData(spdf, nameColumnToPlot="mean(Gini)")
+```
+#Consumer Complaints Data
+
+![](ConsumerComplaints.png)
+
+In this result set we will be analyzing the Consumer complaints about financial services
+
+"The Consumer Financial Protection Bureau (CFPB) is the first federal agency solely focused on
+consumer financial protection and consumer complaints  are an integral part of that work. The
+CFPB helps connect consumers with financial companies to make their voices heard  This Monthly Complaint Report
+provides a high-level snapshot of trends in consumer complaints. The Monthly Complaint
+Report uses a three-month rolling average, comparing the current average to the same period in
+the prior year where appropriate, to account for monthly and seasonal fluctuations. In some
+cases, we use month-to-month comparisons to highlight more immediate trends. For companylevel
+complaint data, we use a three-month rolling average of complaints sent to companies for
+response. This company-level complaint data lags other complaint data in this report by two
+months to reflect the 60 days companies have to respond to complaints, confirming a
+commercial relationship with the consumer" -https://s3.amazonaws.com/files.consumerfinance.gov/f/documents/201702_cfpb_Monthly-Complaint-Report.pdf
+
+##Read in Data
+```{r}
+
+file_path <- c("https://raw.githubusercontent.com/nobieyi00/CUNY_MSDA_R/master/consumer_complaints.csv")
+
+cc_df <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE,
+           na.strings = c("N/A",''))
+
+
+
+```
+
+##Find the number of sub-product complaints
+```{r}
+cc_df %>%
+group_by(Sub.product) %>%
+summarise(count=n())
+
+
+```
+
+
+##Find the number of sub-product complaints
+
+```{r}
+cc_df %>%
+ group_by(Sub.product) %>%
+  summarise(count=n()) %>%
+  filter(Sub.product != '' )%>%
+   arrange(desc(count))
+
+
+```
+
+
+##Find the product that gets most complaints
+```{r}
+cc_df %>%
+ group_by(Product) %>%
+  summarise(No_Products=n()) %>%
+   arrange(No_Products)
+```
+
+##Find the product that gets most complaints with sub products
+
+```{r}
+cc_df %>%
+  filter(Sub.product != '' )%>%
+ group_by(Product, Sub.product) %>%
+  summarise(No_Products=n()) %>%
+   arrange(No_Products)
+
+```
+
+##TOP 10 Companies with the least timely response and most complaints
+
+```{r}
+
+company_df <- cc_df %>%
+  filter(Timely.response.=='No')%>%
+  group_by(Company)%>%
+  summarise(No_complaints = n())%>%
+  arrange(desc(No_complaints))
+
+
+company_ten <-head(company_df , 10)
+company_ten
+# Generate data
+ ggplot(company_ten, aes(x=Company,y=No_complaints,fill=Company)) + geom_bar(stat="identity", show.legend = FALSE) + coord_flip()
+
+
+
+```
+
+**We clearly see it is Wells fargo is at fault**
+
+##Which state has the most complaints, top 10
+
+
+```{r}
+
+ top10_states<- cc_df %>%
+  group_by(State)%>%
+  summarise(No_complaints = n())%>%
+  arrange(desc(No_complaints))%>%
+  select(State)%>%
+  head(10)
+
+ top10_states
+
+```
+
+
+##Analyze complaints on a monthly basis per product
+
+```{r}
+
+Product_Month_df <- cc_df %>%
+  separate(Date.received, c("Month","Day","Year"), sep = "/") %>%
+  mutate(Month_num= as.numeric(Month)) %>%
+  group_by(Product,Month_num)%>%
+  summarise(No_complaints = n())%>%
+  arrange(Product , Month_num)
+
+pm_b <-Product_Month_df%>%
+  filter(Product=="Bank account or service")
+ 
+
+     
+  
+ ggplot(Product_Month_df, aes(Month_num, No_complaints,colour=Product)) + 
+    geom_line() + 
+    geom_point() +ggtitle(label="Trend of complaints per month") 
+```
+ 
+**We notice that Debt collection is usually high in beginning of year**
+ 
+```{r}
+ plot(pm_b$Month_num, pm_b$No_complaints)
+  lines(pm_b$Month_num[order(pm_b$Month_num)], pm_b$No_complaints)
+   title(main="Bank Accout or Service trend per month",	xlab="Month", ylab="Number of complaints")
+```
+
+
+##Peform trend analysis compare last years Number of complaints to this years per states with most complaints
+
+```{r}
+S_y_complain <-cc_df %>%
+  separate(Date.received, c("Month","Day","Year"), sep = "/") %>%
+  mutate(Year_num= as.numeric(Year)) %>%
+  group_by(State,Year_num)%>%
+  summarise(No_complaints = n())%>%
+  filter(State %in%  top10_states$State )%>%
+  arrange(State,Year_num)
+
+S_y_complain 
+ggplot(S_y_complain, aes(x=State,y=No_complaints,fill=Year_num)) + geom_bar(stat="identity", show.legend = TRUE) 
+```
+
+# Child Mortality Rates
+
+![](childmortalitypost.png)
+
+Child mortality rate around the world is a bench mark used to know how healthy are the childeren around the world. World leaders need to pay attention to their countries child mortality to avoid catastrophic consequences in future generation. In this data set we would study the child mortality rates
+This data was retrieved from http://www.childmortality.org/files_v20/download/RatesDeaths_AllIndicators.xlsx
+
+##Load data with Child mortality rate data
+```{r}
+
+file_path <- c("https://raw.githubusercontent.com/nobieyi00/CUNY_MSDA_R/master/childmortality.csv")
+
+CMR_df <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE,
+           na.strings = c("N/A",''))
+
+
+
+```
+##Get the median values for each country as the value for analysis
+
+```{r}
+CMR_1<-CMR_df %>%
+  filter(Uncertainty.bounds. == 'Median')
+```
+
+##Lets tidy the data and find Infant mortality so that it can be easily analyzed using gather()
+```{r}
+IM <-CMR_1 %>%
+gather("type_year","Value",4:ncol(CMR_1)) %>%
+#filter(type_year %in% c('Infant.Deaths.','IMR'))%>%
+mutate(year= as.numeric(str_sub(type_year,-4,-1)), type = str_sub(type_year,1,str_length(type_year)-5) )%>%
+filter(type %in% c('Infant.Deaths','IMR'))%>%
+filter(is.na(Value)==FALSE)%>%  
+select (CountryName, year,type,Value)
+```
+
+##Analyze some countries with high Mortality rates and notice trend in two year periods
+```{r }
+
+Cnt_10<-IM%>% 
+  filter(type=="IMR" )%>%
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(desc(avg))%>%
+select(CountryName)%>%
+  head(10)
+
+
+
+         
+ tre<- IM%>% 
+  filter(type=="IMR" )%>%
+  filter(CountryName %in% Cnt_10$CountryName  )%>% 
+    
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(CountryName)
+
+
+ggplot(tre, aes(x=CountryName,y=avg,fill=year_range)) + geom_bar(stat="identity", show.legend = TRUE) 
+
+
+
+```
+
+```{r}
+
+Cnt_10<-IM%>% 
+  filter(type=="IMR" )%>%
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(desc(avg))%>%
+select(CountryName)%>%
+  head(3)
+
+
+
+         
+ tre<- IM%>% 
+  filter(type=="IMR" )%>%
+  filter(CountryName %in% Cnt_10$CountryName  )%>% 
+    
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(CountryName)
+
+ggplot(tre, aes(year_range, avg,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of infant mortality rates over the years") +
+    geom_line()
+   
+```
+
+##Infant Number of Deaths
+
+**Lets look the country that had the most reduced rate of child deaths over time. This country we can say made the most improvement**
+
+###But first lets look at any country and plot it out over time
+```{r}
+france_ND <-IM%>% 
+  filter(type=="Infant.Deaths" & CountryName== "France" )
+
+ggplot(france_ND, aes(year, Value,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of Infant number of deaths over the years") +
+    geom_line()
+
+#find coorelation
+
+corr_france <- cor(france_ND$Value,france_ND$year)
+
+sd(france_ND$year)
+
+sd(france_ND$Value)
+Regression_slop <-corr_france*(sd(france_ND$Value)/sd(france_ND$year))
+
+
+
+
+```
+
+###Lets look at the trend of Zambia
+
+```{r}
+Zambia_ND <-IM%>% 
+  filter(type=="Infant.Deaths" & CountryName== "Zambia" )
+
+ggplot(Zambia_ND, aes(year, Value,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of Infant number of deaths over the years") +
+    geom_line()
+
+#find coorelation
+
+corr_Zambia <- cor(Zambia_ND$Value,Zambia_ND$year)
+
+sd(Zambia_ND$year)
+
+sd(Zambia_ND$Value)
+Regression_slop <-corr_Zambia*(sd(Zambia_ND$Value)/sd(Zambia_ND$year))
+Regression_slop
+
+
+
+
+```
+
+###Lets look at Nigeria
+
+```{r}
+Nigeria_ND <-IM%>% 
+  filter(type=="Infant.Deaths" & CountryName== "Nigeria" )
+
+ggplot(Nigeria_ND, aes(year, Value,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of Infant number of deaths over the years") +
+    geom_line()
+
+
+
+
+
+```
+##What is regression slope for all the countries
+###Lets get the top 10 countries
+```{r}
+IM%>% 
+  filter(type=="Infant.Deaths" )%>% 
+  group_by(CountryName)%>% 
+  summarize(Cor_co = cor(Value,year), sd_year=sd(year), sd_value=sd(Value) ,Regression_slope=cor(Value,year)*(sd(Value)/sd(year)))%>% 
+arrange(Regression_slope)%>%
+head(10)
+```
+
+###Lets look at China
+
+```{r}
+China_ND <-IM%>% 
+  filter(type=="Infant.Deaths" & CountryName== "China" )
+
+ggplot(China_ND, aes(year, Value,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of Infant number of deaths over the years") +
+    geom_line()
+
+
+
+
+
+```
+###Lets get the bottom 10 countries
+```{r}
+IM%>% 
+  filter(type=="Infant.Deaths" )%>% 
+  group_by(CountryName)%>% 
+  summarize(Cor_co = cor(Value,year), sd_year=sd(year), sd_value=sd(Value) ,Regression_slope=cor(Value,year)*(sd(Value)/sd(year)))%>% 
+arrange(desc(Regression_slope))%>%
+head(10)
+```
+
+**This shows Nigeria infant deaths increased over time and is the worst in the world. We can also say that the top 10 infant child deaths are in African countries. However, a plot above shows it is is reducing. I am from Nigeria and I am surprised that our infant mortality rose the highest.**
+
+
+##Under 5 mortality analysis
+
+```{r under5, eval = TRUE}
+Under5_data <- select(CMR_df, ISO.Code:U5MR.2015,Under.five.Deaths.1950:Under.five.Deaths.2015)
+datatable(head(Under5_data))
+
+```
+
+###Under 5 mortality rate analysis
+```{r under5rate, eval = TRUE}
+Under5_rate <- Under5_data %>% select(ISO.Code:U5MR.2015) %>%
+ filter(Uncertainty.bounds. == "Median")
+        
+```
+
+####Transform data into long form
+```{r transform, eval = TRUE}
+under5_rateLong <- gather(Under5_rate,Year, MortalityRate, U5MR.1950:U5MR.2015)
+
+under5_rateLong$Year <- as.numeric(str_extract(under5_rateLong$Year, "[[:digit:]]{4}"))
+head(under5_rateLong)
+```
+
+####Eliminate N/A values and redundant Uncertainty Bounds Column
+```{r omit, eval = TRUE}
+Under5_rateSome <- na.omit(under5_rateLong)
+Under5_rateSome <- select(Under5_rateSome, ISO.Code, CountryName, Year, MortalityRate)
+```
+
+####Display Map of Mortality rates
+
+
+```{r drawmap2, eval= TRUE}
+#create a map-shaped window
+par(mai=c(0,0,0.2,0),xaxs="i",yaxs="i")
+#join to a coarse resolution map
+spdf <- joinCountryData2Map(Under5_rateSome, joinCode="ISO3", nameJoinColumn="ISO.Code")
+
+mapCountryData(spdf, nameColumnToPlot="MortalityRate",missingCountryCol = "grey",colourPalette = c("green", "yellow", "red"))
+```
+**From the map it can be seen that countries in South America, Africa and Asia tend to have higher mortality rates than the rest of the world**
+
+One exeption in Africa is Namibia
+
+
+```{r namibia, eval = TRUE}
+namibia_data <- filter(Under5_rateSome, CountryName == "Namibia")
+boxplot(namibia_data$MortalityRate)
+```
+
+
+####Isolate Numbers
+```{r collectnumbers, eval = TRUE}
+Under5_count <- Under5_data %>% select(ISO.Code:Uncertainty.bounds.,Under.five.Deaths.1950:Under.five.Deaths.2015) %>%
+ filter(Uncertainty.bounds. == "Median")
+
+```
+
+####Transform data into long form
+```{r transform2, eval = TRUE}
+under5_countLong <- gather(Under5_count,Year, MortalityRate, Under.five.Deaths.1950:Under.five.Deaths.2015)
+under5_countLong$Year <- as.numeric(str_extract(under5_countLong$Year, "[[:digit:]]{4}"))
+head(under5_countLong)
+
+```
+####Eliminate N/A values and redundant Uncertainty Bounds Column
+```{r omit2, eval = TRUE}
+Under5_countLong <- na.omit(under5_countLong)
+Under5_countLong <- select(Under5_countLong, ISO.Code, CountryName, Year, MortalityRate)
+head(Under5_countLong)
+```
+
+
+```{r MortalityU5trend_by_country, eval = TRUE}
+r <- range(Under5_countLong$MortalityRate)
+
+#Setup sparklines
+box_string <- "type: 'box', lineColor: 'black', whiskerColor: 'black', outlierFillColor: 'black', outlierLineColor: 'black', medianColor: 'black', boxFillColor: 'orange', boxLineColor: 'black'"
+cb_box = JS(paste0("function (oSettings, json) { $('.spark:not(:has(canvas))').sparkline('html', { ", 
+    box_string, ", chartRangeMin: ", r[1], ", chartRangeMax: ", r[2], " }); }"), 
+    collapse = "")
+
+
+#Indicate which columns will use sparklines (the second in this case)
+table_columns2 <- list(list(targets = c(1), render = JS("function(data, type, full){ return '<span class=spark>' + data + '</span>' }")))
+
+trend_details2 <- 
+  Under5_countLong %>% 
+  group_by(CountryName) %>% 
+  summarise(Trend = paste(MortalityRate, collapse = ",")) 
+
+d2 <- datatable(trend_details2, rownames = FALSE, options = list(columnDefs = table_columns2, fnDrawCallback = cb_box))
+d2$dependencies <- append(d2$dependencies, htmlwidgets:::getDependency("sparkline"))
+d2
+
+```
+
+**China and India show great variability in their mortality numbers, almost all other countries show very little variablity in the numbers**
+
+```{r plotchina, eval = TRUE}
+china_data <- filter(Under5_countLong, CountryName == "China")
+f <- ggplot(china_data, aes(Year,MortalityRate))
+f+geom_col()
+
+```
+
+**in the 1900's China hand a large number of deaths of children under 5.  This amount has decreased over the years.**
+
+##Neonatal Deaths
+
+###Lets tidy the data and find Neonatal mortality so that it can be easily analyzed using gather()
+```{r}
+NM <-CMR_1 %>%
+gather("type_year","Value",4:ncol(CMR_1)) %>%
+#filter(type_year %in% c('Infant.Deaths.','IMR'))%>%
+mutate(year= as.numeric(str_sub(type_year,-4,-1)), type = str_sub(type_year,1,str_length(type_year)-5) )%>%
+filter(type %in% c('Neonatal.Deaths','NMR'))%>%
+filter(is.na(Value)==FALSE)%>%  
+select (ISO.Code,CountryName, year,type,Value)
+```
+
+###Analyse the trend of those with highest rates
+```{r}
+
+TopNM<-NM%>% 
+  filter(type=="NMR" )%>%
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(desc(avg))%>%
+select(CountryName)%>%
+  head(6)
+
+
+
+         
+ tre<- NM%>% 
+  filter(type=="NMR" )%>%
+  filter(CountryName %in% TopNM$CountryName  )%>% 
+    
+mutate(year_range=ifelse(year %in% c(1950:1970),  '1950_1970',
+                  ifelse(year %in% c(1971:1990),'1971_1990',
+                  ifelse(year %in% c(1991:2010),'1991_2010',
+                  ifelse(year %in% c(2011:2030),'2011_2030',NA)))))%>%
+    group_by(CountryName,year_range)  %>%
+    summarise(avg  = sum(Value)/n())%>%
+    arrange(CountryName)
+
+ggplot(tre, aes(year_range, avg,colour=CountryName, group=CountryName
+                  )) +  geom_point() +ggtitle(label="Trend of neonatal mortality rates over the years") +
+    geom_line()
+   
+```
+###World View
+
+```{r drawmap3, eval= TRUE}
+NM_map <- NM%>% 
+  filter(type=="NMR" )
+#create a map-shaped window
+par(mai=c(0,0,0.2,0),xaxs="i",yaxs="i")
+#join to a coarse resolution map
+spdf <- joinCountryData2Map(NM_map, joinCode="ISO3", nameJoinColumn="ISO.Code")
+
+mapCountryData(spdf, nameColumnToPlot="Value",missingCountryCol = "grey",colourPalette = "diverging", mapTitle = "World wide neonatal mortality rates")
+```
+
+
