@@ -4,8 +4,11 @@ author: "N Obieyisi and N Nedd"
 date: "March 9, 2017"
 output: 
   html_document:
+    toc: true # table of content true
+    depth: 3  # upto three depths of headings (specified by #, ## and ###)
     theme: cerulean  
-    highlight: tango  
+    highlight: tango
+    
 ---
 
 ```{r setup, include=FALSE}
@@ -29,7 +32,11 @@ library(sparkline)
 ```
 #Gini Values Worldwide
 
-![](ginidatapost.png)
+![](https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/ginidatapost.png)
+
+According to Wikipedia the Gini Coefficient is "a measure of statistical dispersion intended to represent the income or wealth distribution of a nation's residents, and is the most commonly used measure of inequality." [https://en.wikipedia.org/wiki/Gini_coefficient].  The data was collected from World Bank's website at [http://databank.worldbank.org/data/reports.aspx?source=2&series=SI.POV.GINI&country=#]
+
+The Gini Coefficient is given in percent form with 100 being perfect inequality and 0 being perfect equality.
 
 ##Read in the data, which was downloaded from the reference and uploaded to github
 
@@ -108,7 +115,10 @@ top10 <- tail(giniSummary_sort, 10)
 datatable(top10, caption = "Highest Gini Values")
 ```
 **The higher the gini value the less equality there is.  By the same token, the lower the gini value the greater equality there is**
+
 **Based on the tables above the lowest average gini over 2000 to 2014 is Azerbaijan (relative high equality in the country), and the highest is Botswana which signifies high inequality in the country** 
+
+##Map of World Wide mean gini coefficient
 
 ```{r drawmap, eval= TRUE}
 #create a map-shaped window
@@ -118,9 +128,10 @@ spdf <- joinCountryData2Map(giniSummary_sort, joinCode="ISO3", nameJoinColumn="C
 
 mapCountryData(spdf, nameColumnToPlot="mean(Gini)")
 ```
+
 #Consumer Complaints Data
 
-![](ConsumerComplaints.png)
+![](https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/ConsumerComplaints.png)
 
 In this result set we will be analyzing the Consumer complaints about financial services
 
@@ -143,8 +154,6 @@ file_path <- c("https://raw.githubusercontent.com/nobieyi00/CUNY_MSDA_R/master/c
 
 cc_df <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE,
            na.strings = c("N/A",''))
-
-
 
 ```
 
@@ -277,7 +286,7 @@ ggplot(S_y_complain, aes(x=State,y=No_complaints,fill=Year_num)) + geom_bar(stat
 
 # Child Mortality Rates
 
-![](childmortalitypost.png)
+![](https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/childmortalitypost.png)
 
 Child mortality rate around the world is a bench mark used to know how healthy are the childeren around the world. World leaders need to pay attention to their countries child mortality to avoid catastrophic consequences in future generation. In this data set we would study the child mortality rates
 This data was retrieved from http://www.childmortality.org/files_v20/download/RatesDeaths_AllIndicators.xlsx
