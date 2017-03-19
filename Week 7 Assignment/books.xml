@@ -1,0 +1,24 @@
+<?xml version="1.0">
+<literature_books>
+  <book id = "1">
+    <title> A World of Poetry </title>
+	<author first="Mark McWatt" second="Hazel Simmons Mc-Donald"/>
+	<Year> 1994 </year>
+	<goodreads_rating> 4.13 </goodreads_rating>
+	<No_pages> 196 </No_pages>
+  </book>
+  <book id = "2">
+    <title> A Brighter Sun </title>
+	<author first="Samuel Selvon"/>
+	<Year> 1953 </year>
+	<goodreads_rating> 4.04 </goodreads_rating>
+	<No_pages> 240 </No_pages>
+  </book>
+  <book id = "3">
+    <title> A man for all seasons </title>
+	<author first="Robert Bolt"/>
+	<Year> 1960 </year>
+	<goodreads_rating> 3.89 </goodreads_rating>
+	<No_pages> 192 </No_pages>
+  </book>
+ </literature_books>
