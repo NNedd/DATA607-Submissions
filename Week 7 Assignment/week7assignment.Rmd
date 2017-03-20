@@ -1,0 +1,80 @@
+---
+title: "Working with XML and JSON in R"
+author: "N Nedd"
+date: "March 19, 2017"
+output: 
+  html_document:
+    theme: cerulean  
+    highlight: tango
+---
+
+#Setup environment
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+if("XML" %in% rownames(installed.packages()) == FALSE) {install.packages("XML")}
+library(XML)
+if("RCurl" %in% rownames(installed.packages()) == FALSE) {install.packages("RCurl")}
+library(RCurl)
+if("rvest" %in% rownames(installed.packages()) == FALSE) {install.packages("rvest")}
+library(rvest)
+if("DT" %in% rownames(installed.packages()) == FALSE) {install.packages("DT")}
+library(DT)
+if("jsonlite" %in% rownames(installed.packages()) == FALSE) {install.packages("jsonlite")}
+library(jsonlite)
+```
+
+##initialise filenames
+
+Since I enjoy reading and thus love literature, the books chosen were selected from some of my favourites read in High School.
+
+Each file as created by hand.
+
+```{r filename-setup, eval = TRUE}
+html_url <- "https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%207%20Assignment/books.html"
+
+xml_url <- "https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%207%20Assignment/books.xml"
+
+json_url <- "https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%207%20Assignment/books.json"
+
+```
+
+#HTML document
+```{r html-handling, eval = TRUE}
+htmlContent <- read_html(html_url)
+htmlTable <- html_table(htmlContent, fill = TRUE)
+final_html <-as.data.frame(htmlTable[1])
+datatable(final_html)
+```
+
+#XML document
+```{r xml-handling, eval=TRUE}
+xmlFile <- getURL(xml_url)
+xmlContent <- xmlParse(xmlFile)
+xmlroot <- xmlRoot(xmlContent)
+final_xml <- xmlToDataFrame(xmlroot)
+datatable(final_xml)
+#Include author names
+finalList <- xmlToList(xmlContent)
+final_xml2  <- as.data.frame(finalList[1])
+final_xml2 <- rbind(final_xml2, as.data.frame(finalList[2]))
+final_xml2 <- rbind(final_xml2, as.data.frame(finalList[3]))
+datatable(final_xml2)
+```
+
+#JSON document
+```{r json-handling}
+jsonFile <- getURL(json_url)
+jsonContent <- fromJSON(jsonFile)
+json_table <- jsonContent$`Literature Books`
+json_table
+#Include author names
+final_json <- cbind(json_table, json_table$author)
+final_json <- final_json[-2]
+datatable(final_json)
+```
+
+# Conclusion
+
+Each document type has its own "personality".  HTML files are simple but it's table feature allows only for simple data organisation.  The XML and JSON format allow for more complex data organisation such as tagging the first and second authors.  
+
+The dataframes are also different. The HTML dataframe was clearly displayed with no complex manipulation necessary.  The XML and JSON dataframes both required extra manipulation to display the names of the authors.  However, after manipulation the JSON dataframe looked more like the HTML one.  The XML dataframe was displayed differently with repeated rows for each author.
