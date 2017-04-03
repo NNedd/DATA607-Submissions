@@ -1,0 +1,102 @@
+---
+title: "DATA 607 - Week 9 Assignment"
+author: "N Nedd"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: HPSTR
+    highlight: github
+---
+
+# Setup of packages
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+if("jsonlite" %in% rownames(installed.packages()) == FALSE) {install.packages("jsonlite")}
+library(jsonlite)
+if("dplyr" %in% rownames(installed.packages()) == FALSE) {install.packages("dplyr")}
+library(dplyr)
+if("stringr" %in% rownames(installed.packages()) == FALSE) {install.packages("stringr")}
+library(stringr)
+if("ggplot2" %in% rownames(installed.packages()) == FALSE) {install.packages("ggplot2")}
+library(ggplot2)
+if("rtimes" %in% rownames(installed.packages()) == FALSE) {install.packages("rtimes")}
+library(rtimes)
+```
+
+#Read in names of NY Times best selling lists from API
+```{r readin-names, eval=TRUE}
+NYT_url <- "https://api.nytimes.com/svc/books/v3/lists/names.json?"
+API_Key <- "fdfd28b541314f5793618f60cefbd084"
+namesRaw <- fromJSON(paste(NYT_url, "api-key=",API_Key, sep=""))
+namesData <- namesRaw$results
+head(namesData)
+
+```
+
+##Isolate fiction lists
+
+```{r filter-fiction, eval = TRUE}
+fictionNames <- filter(namesData, str_detect(namesData$display_name, "Fiction"))
+
+
+```
+
+
+#Read in Current Bestseller fiction lists
+```{r readin, eval=TRUE}
+NYT_url <- "https://api.nytimes.com/svc/books/v3/lists.json?"
+API_Key <- "fdfd28b541314f5793618f60cefbd084"
+allData <- data.frame()
+for(i in 1:nrow(fictionNames)){
+  pageData <- fromJSON(paste(NYT_url, "&api-key=",API_Key, "&list=",fictionNames$list_name_encoded[i],sep= ""), simplifyDataFrame = TRUE)
+  allData <- rbind(allData, pageData$results)
+}
+head(allData)
+```
+
+
+##Extract Book Details
+```{r book-details, eval=TRUE}
+detailsData <- data.frame()
+for(i in 1:nrow(allData)){
+detailsData <- rbind(detailsData,as.data.frame(allData$book_details[i]))
+}
+
+head(detailsData)
+```
+
+##Combine Book Details with Book Data and select interesting columns
+
+```{r combine-data, eval=TRUE}
+bookData <- cbind(allData, detailsData)
+analyseData <- select(bookData, title, author, publisher, rank, weeks_on_list)
+head(analyseData)
+```
+
+
+#Analyse Data
+
+##Highest number of weeks on list (top 5)
+
+```{r highest-weeks, eval=TRUE}
+analyseData_weeks <- arrange(analyseData, desc(weeks_on_list))
+top_5 <- analyseData_weeks[1:5,]
+
+ggplot(top_5, aes(title,weeks_on_list)) + geom_bar(stat="identity") +theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+
+**There are duplicate books in the table indicating a repeat on the best seller list**
+
+
+
+#Using rtimes api
+
+A look at recent news items about best selling fiction.  The as_search function searches the New York Times articles.
+
+```{r article-search, eval=TRUE}
+best_articles <- as_search(q="best+seller+fiction",begin_date='20170101',end_date='20170331',key=API_Key)
+best_articles$meta
+best_articles$data[1:3]
+```
+
+
