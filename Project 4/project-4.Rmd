@@ -1,0 +1,347 @@
+---
+title: "Project 4"
+author: "Nnaemezue Obi-Eyisi & Nkasi Nedd"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+#Introduction
+This project explores the use of R to classify whether an email message is spam or not.  The data is taken from Spam Assain's Public Corpus found [here](http://spamassassin.apache.org/old/publiccorpus/).
+
+The approach is taken to utilise a number of classification algorithms in order to ascertain the most accurate classification technique for this data.
+
+To replicate this project the data in the folders spam and easy_ham (found in this project's repository on github) should be downloaded and placed in your working folder.
+
+
+
+#Setup environment
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+if("tidytext" %in% rownames(installed.packages()) == FALSE) {install.packages("tidytext")}
+library(tidytext)
+if("rpart" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart")}
+library(rpart)
+if("tidyr" %in% rownames(installed.packages()) == FALSE) {install.packages("tidyr")}
+library(tidyr)
+if("dplyr" %in% rownames(installed.packages()) == FALSE) {install.packages("dplyr")}
+library(dplyr)
+if("tm" %in% rownames(installed.packages()) == FALSE) {install.packages("tm")}
+library(tm)
+if("rpart.plot" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart.plot")}
+library(rpart.plot)
+if("e1071" %in% rownames(installed.packages()) == FALSE) {install.packages("e1071")}
+library(e1071)
+if("class" %in% rownames(installed.packages()) == FALSE) {install.packages("class")}
+library(class)
+if("stringr" %in% rownames(installed.packages()) == FALSE) {install.packages("stringr")}
+library(stringr)
+if("nnet" %in% rownames(installed.packages()) == FALSE) {install.packages("nnet")}
+library(nnet)
+if("wordcloud" %in% rownames(installed.packages()) == FALSE) {install.packages("wordcloud")}
+library(wordcloud)
+```
+
+#setup paths and functions
+*Function taken from ML for hackers Chapter 3 - https://github.com/johnmyleswhite/ML_for_Hackers/tree/master/03-Classification *
+
+```{r set-paths, eval=TRUE}
+spam_path <- "spam/"
+ham_path <- "easy_ham/"
+
+```
+
+
+```{r read-in-function, eval=TRUE}
+get.msg <- function(path)
+{
+# Return a single element vector of just the email body
+# This is a very simple approach, as we are only using 
+# words as features
+  con <- file(path, open = "rt")
+  text <- readLines(con)
+  # The message always begins after the first full line break
+  msg <- text[seq(which(text == "")[1] + 1, length(text), 1)]
+  close(con)
+  return(paste(msg, collapse = "\n"))
+}
+
+```
+
+```{r read-in-files, eval=TRUE}
+spam_docs <- dir(spam_path)
+spam_docs <- spam_docs[which(spam_docs!="cmds")]
+all_spam <- sapply(spam_docs, function (p) get.msg(paste(spam_path,p,sep="")))
+
+ham_docs <- dir(ham_path)
+ham_docs <- ham_docs[which(ham_docs!="cmds")]
+all_ham <- sapply(ham_docs, function (p) get.msg(paste(ham_path,p,sep="")))
+```
+
+```{r strip-corpus-setup, eval=TRUE}
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE, minDocFreq=2)
+```
+
+#Create Spam and Ham Corpus
+##Including WordLists in the form of Term Document and Document Term matrices
+
+```{r create-corpus, eval=TRUE}
+
+spam_corpus <- Corpus(VectorSource(all_spam))
+spam_tdm <- TermDocumentMatrix(spam_corpus,control)
+spam_dtm <- DocumentTermMatrix(spam_corpus, control)
+#remove sparse items
+spam_tdm2<-removeSparseTerms(spam_tdm,0.8)
+
+ham_corpus <- Corpus(VectorSource(all_ham))
+ham_tdm <- TermDocumentMatrix(ham_corpus,control)
+ham_dtm <- DocumentTermMatrix(ham_corpus, control)
+#remove sparse items
+ham_tdm2<-removeSparseTerms(ham_tdm,0.8)
+```
+
+#Visualise the Ham Corpus
+```{r, visualise-ham, eval=TRUE}
+wordcloud(ham_corpus, min.freq=600)
+```
+
+#Visualise the Spam Corpus
+```{r, visualise-spam, eval=TRUE}
+wordcloud(spam_corpus, min.freq=400)
+```
+
+
+
+#Convert corpus to tidy format
+
+```{r tidy-corpus, eval=TRUE}
+tidy_ham <- tidy(ham_tdm2)
+head(tidy_ham)
+tidy_spam<- tidy(spam_tdm2)
+head(tidy_spam)
+```
+
+#Change to Wide Format
+```{r wide-data, eval=TRUE}
+wide_ham <- spread(tidy_ham, term, count, fill = 0)
+head(wide_ham)
+wide_spam <- spread(tidy_spam, term, count, fill = 0)
+head(wide_spam)
+```
+
+#Insert column to mark class of document
+```{r insert-column, eval=TRUE}
+ham_class <- wide_ham %>% 
+    mutate(class = "ham")
+
+spam_class <- wide_spam %>% 
+    mutate(class = "spam")
+
+```
+
+#Merge Ham and Spam data
+```{r merge-data, eval=TRUE}
+#Merge
+all_data <- bind_rows(ham_class, spam_class)
+#Rearrance columns
+all_data <- select(all_data, class, everything())
+#Set N/A to 0
+all_data[is.na(all_data)] <- 0
+#Make class variable a factor variable
+all_data$class <- as.factor(all_data$class)
+#Remove the document names
+all_data <- subset(all_data, select = -c(document))
+head(all_data)
+```
+
+#Split into Training and Test Sets
+
+```{r  train-test}
+set.seed(1800)
+index <- 1:nrow(all_data)
+#Perform a 60/40 split
+trainIndex <- sample(index, trunc(length(index) * 0.6))
+train_data <- all_data[trainIndex,]
+test_data <- all_data[-trainIndex,]
+```
+
+#Visualise the Training and Test sets
+```{r visualise-sets, eval=TRUE}
+table(train_data$class)
+plot(train_data$class, main = "Training Data Set")
+
+table(test_data$class)
+plot(test_data$class, main = "Test Data Set")
+```
+
+#Classification - Naive Bayes 
+
+The Naive Bayes Classifier is a probabilistic classifier the uses Bayes Theorm
+
+```{r classify-naivebayes, eval=TRUE}
+pc <- proc.time()
+#Create a Naive Bayes classifier object
+naivebayes_model <- naiveBayes(train_data, factor(train_data$class))
+
+proc.time() - pc
+
+summary(naivebayes_model)
+```
+
+
+##Evaluation of Naive Bayes
+```{r evaluate-naivebayes, eval=TRUE}
+#Evaluate the performance on the test data
+naivebayes_predict <- predict(naivebayes_model, newdata=test_data)
+
+#Check the predictions against reality
+table(`Actual Class` = test_data$class, `Predicted Class` = naivebayes_predict)
+```
+
+
+##Accuracy of Naive Bayes
+
+```{r accuracy-naivebayes, eval=TRUE}
+naivebayes_error <- sum(test_data$class != naivebayes_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - naivebayes_error))
+```
+
+
+#Classification - Recursive Partitioning and Regression Trees Algorithm 
+
+This algorithm creates a decision tree for classification
+
+```{r classify-tree, eval=TRUE}
+pc <- proc.time()
+tree_model <- rpart(class ~ ., data = train_data, method = "class")
+proc.time() - pc
+
+printcp(tree_model)
+# plot(tree_model, uniform = TRUE, main = "Classification (RPART).  Classification Tree for SPAM/HAM")
+# text(tree_model, all=TRUE, cex = 0.9)
+
+prp(tree_model,faclen=0,cex=0.75,extra=1)
+```
+
+##Evaluation of Regression Tree
+
+```{r evaluate-tree, eval=TRUE}
+tree_predict <- predict(tree_model, newdata = test_data, type = "class")
+table('Actual Class' = test_data$class, 'Predicted Class' = tree_predict)
+
+```
+
+##Accuracy of Regression Tree
+
+```{r accuracy-tree, eval=TRUE}
+tree_error <- sum(test_data$class != tree_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - tree_error))
+```
+
+#Classification - Support Vector Machine (SVM)
+
+SVMs is a non-probabilistic linear classifier
+
+```{r classify-svm, eval=TRUE}
+pc <- proc.time()
+svm_model <- svm(class ~ ., method = "class", data = train_data)
+proc.time() - pc
+
+summary(svm_model)
+```
+
+
+##Evaluation of SVM
+
+```{r evaluate-svm, eval=TRUE}
+svm_predict <- predict(svm_model, newdata = test_data, type = "class")
+table(`Actual Class` = test_data$class, `Predicted Class` = svm_predict)
+```
+
+##Accuracy of SVM
+
+```{r accuracy-svm, eval=TRUE}
+svm_error <- sum(test_data$class != svm_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - svm_error))
+```
+
+
+#Classification - K-Nearest Neighbours (KNN)
+
+This is a non-parametric classifier
+
+```{r classify-knn, eval=TRUE}
+#change factor to numeric
+train_data_knn <- train_data
+train_data_knn$class <- str_replace_all(train_data_knn$class, "ham", "1")
+train_data_knn$class <- str_replace_all(train_data_knn$class, "spam", "0")
+train_data_knn$class <- as.numeric(as.character(train_data_knn$class))
+
+test_data_knn <- test_data
+test_data_knn$class <- str_replace_all(test_data_knn$class, "ham", "1")
+test_data_knn$class <- str_replace_all(test_data_knn$class, "spam", "0")
+test_data_knn$class <- as.numeric(as.character(test_data_knn$class))
+
+
+pc <- proc.time()
+knn_model <- knn(train=train_data_knn,test=test_data_knn ,cl = train_data_knn$class,k = 5)
+
+proc.time() - pc
+summary(knn_model)
+
+```
+
+##Evaluation of KNN
+
+```{r evaluate-knn, eval=TRUE}
+table(`Actual Class` = test_data_knn$class, `Predicted Class` = knn_model)
+
+```
+##Accuracy of KNN
+
+```{r accuracy-knn, eval=TRUE}
+knn_error <- sum(test_data_knn$class != knn_model)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - knn_error))
+```
+
+#Classification - Artificial Neural Network (ANN)
+A classifier modelled on the human brain and nervous system
+
+```{r classify-ann, eval=TRUE}
+pc <- proc.time()
+ann_model<-nnet(class~.,data=train_data,size=10,decay=0.1)
+proc.time() - pc
+
+```
+
+##Evaluation of ANN
+
+```{r evaluate-ann, eval=TRUE}
+ann_predict <- predict(ann_model, newdata = test_data, type="class")
+table(`Actual Class` = test_data$class, `Predicted Class` = ann_predict)
+```
+
+##Accuracy of ANN
+```{r accuracy-ann, eval=TRUE}
+knn_error <- sum(test_data$class != ann_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - knn_error))
+```
+
+
+#Conclusion
+
+From the accuracies calculated it can be concluded that the best performing classifiers for this task are the Decision Tree and the Neural Networks.  The worst performers were Naive Bayes and K-Nearest Neighbours.
+
+#References
+
+The following sources were used to complete this assignment:
+
+* http://rstudio-pubs-static.s3.amazonaws.com/6288_1e178feb2c144ec5961a18a288330e12.html
+
+* https://rstudio-pubs-static.s3.amazonaws.com/53226_2f5a1140154646909fee0a6f01fc8bf2.html
+
+* https://github.com/johnmyleswhite/ML_for_Hackers/tree/master/03-Classification
+
+
+
