@@ -17,8 +17,9 @@ To replicate this project the data in the folders spam and easy_ham (found in th
 
 
 #Setup environment
-```{r setup, include=TRUE}
+```{r setup, include=TRUE, warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 if("tidytext" %in% rownames(installed.packages()) == FALSE) {install.packages("tidytext")}
 library(tidytext)
 if("rpart" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart")}
