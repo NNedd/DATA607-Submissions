@@ -1,7 +1,7 @@
 ---
-title: "DATA607-Assignment2"
+title: "DATA607-Week 13 Assignment"
 author: "N Nedd"
-date: "February 12, 2017"
+date: "April 30, 2017"
 output: html_document
 ---
 
@@ -61,13 +61,34 @@ write.csv(RatingsTable, file="ratings.csv")
 graphdb = startGraph("http://localhost:7474/db/data", username = "neo4j", password = "admin")
 clear(graphdb, input = F)
 
-query = "
-USING PERIODIC COMMIT
-LOAD CSV WITH HEADERS FROM 'file:movies.csv' AS row
-CREATE (:Movie {MovieID: row.MovieID, MovieName: row.MovieName, ReleaseDate: row.ReleaseDate, BoxOfficeGross: row.BoxOfficeGross});
+query1 = "USING PERIODIC COMMIT
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%2013%20Assignment/movies.csv' AS row
+CREATE (:Movies {MovieID: row.MovieID, MovieName: row.MovieName, ReleaseDate: row.ReleaseDate, BoxOfficeGross: row.BoxOfficeGross});
 
 "
-cypher(graphdb, query)
+cypher(graphdb, query1)
+
+query2 = "USING PERIODIC COMMIT
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%2013%20Assignment/reviewers.csv' AS row
+CREATE (:Reviewers {ReviewerID: row.ReviewerID, ReviewerName: row.ReviewerName});
+
+"
+cypher(graphdb, query2)
+
+query3 = "USING PERIODIC COMMIT
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/NNedd/DATA607-Submissions/master/Week%2013%20Assignment/ratings.csv' AS row
+CREATE (:Ratings {RatingsID: row.RatingsID, Reviewer: row.Reviewer, Movie: row.Movie, Rating: row.Rating});
+
+"
+cypher(graphdb, query3)
+
+
+
 
 ```
 
+#Comparison
+
+With a graph database like Neo4j relationship are defined on a row by row basis rather than through the entire table.  This makes it more suitable for complex structures.
+
+On the other hand, the relational database is geared towards faster processing and less storage space, very useful advantages when dealing with large datasets.
