@@ -1,0 +1,73 @@
+---
+title: "DATA607-Assignment2"
+author: "N Nedd"
+date: "February 12, 2017"
+output: html_document
+---
+
+#Assignment
+
+
+For this assignment, you should take information from a relational database and migrate it to a NoSQL database of your own choosing. 
+
+For the relational database, you might use the flights database, the tb database, the "data skills" database your team created for Project 3, or another database of your own choosing or creation.
+
+For the NoSQL database, you may use MongoDB (which we introduced in week 7), Neo4j, or another NoSQL database of your choosing.
+
+Your migration process needs to be reproducible.  R code is encouraged, but not required.
+
+You should also briefly describe the advantages and disadvantages of storing the data in a relational database vs. your NoSQL database.
+
+
+#Introduction
+
+The assignment will use the database created in Assignment 2 of this course - a movie recommendation database with the following schema:
+
+![Realational Database Schema](relational_schema.png)
+
+
+#Setup R and install packages to be used
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if("RMySQL" %in% rownames(installed.packages()) == FALSE) {install.packages("RMySQL")}
+library(RMySQL)
+if("RNeo4j" %in% rownames(installed.packages()) == FALSE) {install.packages("RNeo4j")}
+library(RNeo4j)
+```
+
+#Make Connection to MySQL
+
+```{r connecttomysql, eval = TRUE}
+ratingsdb = dbConnect(MySQL(), user='data607nn', password='password', dbname='data607Assignment2nn', host='localhost')
+```
+
+#Run queries to save database to csv.
+
+```{r savedb, eval=TRUE}
+MoviesTable <- dbGetQuery(ratingsdb, "SELECT * FROM Movies;")
+write.csv(MoviesTable, file="movies.csv")
+ReviewersTable <- dbGetQuery(ratingsdb, "SELECT * FROM Reviewers")
+write.csv(ReviewersTable, file="reviewers.csv")
+RatingsTable <- dbGetQuery(ratingsdb, "SELECT * FROM Ratings")
+write.csv(RatingsTable, file="ratings.csv")
+
+```
+
+#Load CSV into Neo4j
+
+```{r load-neo4j, eval=TRUE}
+graphdb = startGraph("http://localhost:7474/db/data", username = "neo4j", password = "admin")
+clear(graphdb, input = F)
+
+query = "
+USING PERIODIC COMMIT
+LOAD CSV WITH HEADERS FROM 'file:movies.csv' AS row
+CREATE (:Movie {MovieID: row.MovieID, MovieName: row.MovieName, ReleaseDate: row.ReleaseDate, BoxOfficeGross: row.BoxOfficeGross});
+
+"
+cypher(graphdb, query)
+
+```
+
