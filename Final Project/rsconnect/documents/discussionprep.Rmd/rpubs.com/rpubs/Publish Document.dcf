@@ -1,0 +1,8 @@
+name: Publish Document
+title:
+account: rpubs
+server: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/273470/647e5ff14c2840a0ae7d754d4bc2828e
+bundleId: https://api.rpubs.com/api/v1/document/273470/647e5ff14c2840a0ae7d754d4bc2828e
+url: http://rpubs.com/NNedd/273470
+when: 1493894645.71617

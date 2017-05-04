@@ -1,0 +1,80 @@
+---
+title: "Final Project Plan"
+author: "N Obi-Eyisi and N Nedd"
+date: "May 3, 2017"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#Project Proposal
+
+This project seeks to build a movie recommender that takes into consideration the overall sentiment about the movies on twitter.  One source of data will be the Movielens database (https://grouplens.org/datasets/movielens/), which consists of over 1 million movie reviews, ratings and user information.  The other source of data will be mined twitter feeds about movies in the database.  This project could be beneficial to a movie service websites like Movielens, Fandango or Netflix, where they will be able to improve the ranking algorithm for user based on real time twitter sentiments.
+
+#Our Approach
+
+Our Approach is to split the project into two phases.  A simple, easy to implement first phase followed by a second phase where complexity is increased.  We have decided to use tweets from Movie Review Tweet (https://twitter.com/FilmReviewIn140?lang=en) as a starting point for the project. 
+
+#Sentiment Analysis
+
+For each tweet from Movie Review Tweet, we will:
+
+*Extract the movie it talks about.
+
+*Extract the grade assigned to the movie
+
+*Extract the review sentence
+
+*Classify the tweet as positve, negative or neutral based on sentiment analysis of review sentence or scoring based on the positive and negative words in the sentence.  
+
+*Validation:  Examine how the sentiment analysis of the words correspond to the grade
+
+#Choosing top movies from which to find most popular
+##Phase One
+
+If movie exists in the database:
+  
+  If Movie sentiment was positive or neutral:
+    
+    For those movies with the same genre (or genre combination):
+      
+      Find the average rating of the movie and select the top 10
+  
+  If Movie sentiment was negative:
+    
+    For those movies not of the same genre
+      
+      Find the average rating of the movie and select the top 10
+
+If movie does not exist in the database:
+  
+  Find the average rating of all movies in the database and select the top 10
+
+##Phase Two
+
+Find similar movies from the database by analysing richer information about the movie.  The richer information will include movie snopsis and other details such as director, actors and studio.  This informaiton will be taken from either Internet Movie Database (http://www.imdb.com/) or The Movie Database (https://www.themoviedb.org/).  Basically, the intent is to build a model that will determine whether the movie is similar or not
+
+Whether or not the movie exists in the database:
+  
+  If Movie sentiment was positive or neutral:
+    
+    For those movies that are similar:
+      
+      Find the average rating of the movie and select the top 10
+  
+  If Movie sentiment was negative:
+    
+    For those movies not similar
+      
+      Find the average rating of the movie and select the top 10
+
+#Find most popular movie
+From top 10, recommend the 3 most popular ones on twitter.  Possible technique would be to find the greatest percentage of positive reviews.
+
+
+#Evaluate the recommender.
+Need to determine evaluation method.
+
+
