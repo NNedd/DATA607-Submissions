@@ -1,0 +1,256 @@
+---
+title: "final proj_sentiment"
+author: "Nnaemezue Obi-Eyisi"
+date: "May 7, 2017"
+output: html_document
+---
+
+#Setup environment
+```{r setup, include=TRUE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if("tidytext" %in% rownames(installed.packages()) == FALSE) {install.packages("tidytext")}
+library(tidytext)
+if("rpart" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart")}
+library(rpart)
+if("tidyr" %in% rownames(installed.packages()) == FALSE) {install.packages("tidyr")}
+library(tidyr)
+if("dplyr" %in% rownames(installed.packages()) == FALSE) {install.packages("dplyr")}
+library(dplyr)
+if("tm" %in% rownames(installed.packages()) == FALSE) {install.packages("tm")}
+library(tm)
+if("rpart.plot" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart.plot")}
+library(rpart.plot)
+if("e1071" %in% rownames(installed.packages()) == FALSE) {install.packages("e1071")}
+library(e1071)
+if("class" %in% rownames(installed.packages()) == FALSE) {install.packages("class")}
+library(class)
+if("stringr" %in% rownames(installed.packages()) == FALSE) {install.packages("stringr")}
+library(stringr)
+if("nnet" %in% rownames(installed.packages()) == FALSE) {install.packages("nnet")}
+library(nnet)
+if("wordcloud" %in% rownames(installed.packages()) == FALSE) {install.packages("wordcloud")}
+library(wordcloud)
+```
+
+#Sentiment Analysis
+
+Train an SVN model with large movie review dataset from source http://ai.stanford.edu/~amaas/data/sentiment/
+
+```{r set-paths, eval=TRUE}
+
+#training
+neg_path <- "D:/aclImdb/train/neg/"
+pos_path <- "D:/aclImdb/train/pos/"
+
+neg_docs <- dir(neg_path)
+pos_docs <- dir(pos_path)
+
+get.msg <- function(path)
+{
+
+  con <- file(path, open = "rt")
+  msg <- readLines(con)
+  close(con)
+  return(paste(msg, collapse = "\n"))
+}
+
+all_neg <- sapply(neg_docs, function (p) get.msg(paste(neg_path,p,sep="")))
+all_pos <- sapply(pos_docs, function (p) get.msg(paste(pos_path,p,sep="")))
+
+
+
+```
+
+```{r}
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE)
+
+
+neg_corpus <- Corpus(VectorSource(all_neg))
+neg_corpus <- tm_map(neg_corpus, stripWhitespace)
+neg_corpus <- tm_map(neg_corpus, content_transformer(tolower))
+neg_corpus <- tm_map(neg_corpus, stemDocument)
+neg_tdm <- TermDocumentMatrix(neg_corpus,control)
+neg_dtm <- DocumentTermMatrix(neg_corpus, control)
+
+#remove sparse items
+neg_tdm2<-removeSparseTerms(neg_tdm,0.95)
+
+pos_corpus <- Corpus(VectorSource(all_pos))
+pos_corpus <- tm_map(pos_corpus, stripWhitespace)
+pos_corpus <- tm_map(pos_corpus, content_transformer(tolower))
+pos_corpus <- tm_map(pos_corpus, stemDocument)
+pos_tdm <- TermDocumentMatrix(pos_corpus,control)
+pos_dtm <- DocumentTermMatrix(pos_corpus, control)
+
+#remove sparse items
+pos_tdm2<-removeSparseTerms(pos_tdm,0.95)
+
+
+```
+
+#Convert corpus to tidy format
+
+```{r tidy-corpus, eval=TRUE}
+tidy_neg <- tidy(neg_tdm2)
+head(tidy_neg)
+tidy_pos<- tidy(pos_tdm2)
+head(tidy_pos)
+```
+
+#Change to Wide Format
+```{r wide-data, eval=TRUE}
+wide_neg <- spread(tidy_neg, term, count, fill = 0)
+head(wide_neg)
+wide_pos <- spread(tidy_pos, term, count, fill = 0)
+head(wide_pos)
+```
+
+#Insert column to mark class of document
+```{r insert-column, eval=TRUE}
+neg_class <- wide_neg %>% 
+    mutate(class = "neg")
+
+pos_class <- wide_pos%>% 
+    mutate(class = "pos")
+
+```
+
+#Merge pos and neg data
+```{r merge-data, eval=TRUE}
+#Merge
+all_data <- bind_rows(neg_class, pos_class)
+#Rearrance columns
+all_data <- select(all_data, class, everything())
+#Set N/A to 0
+all_data[is.na(all_data)] <- 0
+#Make class variable a factor variable
+all_data$class <- as.factor(all_data$class)
+#Remove the document names
+all_data <- subset(all_data, select = -c(document))
+head(all_data)
+
+```
+
+#Visualise the Training and Test sets
+```{r visualise-sets, eval=TRUE}
+table(train_data$class)
+plot(train_data$class, main = "Training Data Set")
+
+
+```
+#Split into Training and Test Sets
+
+```{r  train-test}
+set.seed(1800)
+index <- 1:nrow(all_data)
+#Perform a 60/40 split
+trainIndex <- sample(index, trunc(length(index) * 0.6))
+train_data <- all_data[trainIndex,]
+test_data <- all_data[-trainIndex,]
+
+
+```
+
+#Classification - Support Vector Machine (SVM)
+
+SVMs is a non-probabilistic linear classifier
+
+```{r classify-svm, eval=TRUE}
+pc <- proc.time()
+svm_model <- svm(class ~ ., method = "class", data = train_data)
+proc.time() - pc
+
+
+
+summary(svm_model)
+```
+##Evaluation of SVM
+
+```{r evaluate-svm, eval=TRUE}
+svm_predict <- predict(svm_model, newdata = test_data, type = "class")
+table(`Actual Class` = test_data$class, `Predicted Class` = svm_predict)
+```
+
+##Accuracy of SVM
+
+```{r accuracy-svm, eval=TRUE}
+svm_error <- sum(test_data$class != svm_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - svm_error))
+```
+
+
+
+##test with tweet data
+
+I created two text files
+001.txt 
+"This movie is very bad and horrible, no plot at all. Such a waste of time"
+
+  002.txt 
+                      "Such an awesome movie. I would love to see it again"
+
+
+
+```{r}
+test_path <- "D:/aclImdb/test2/"
+test_docs <- dir(test_path)
+
+get.msg <- function(path)
+{
+
+  con <- file(path, open = "rt")
+  msg <- readLines(con)
+  close(con)
+  return(paste(msg, collapse = "\n"))
+}
+all_test <- sapply(test_docs, function (p) get.msg(paste(test_path,p,sep="")))
+
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE)
+
+
+test_corpus <- Corpus(VectorSource(all_test))
+test_corpus <- tm_map(test_corpus, stripWhitespace)
+test_corpus <- tm_map(test_corpus, content_transformer(tolower))
+test_corpus <- tm_map(test_corpus, stemDocument)
+
+test_tdm <- TermDocumentMatrix(test_corpus,control)
+
+
+
+tidy_test <- tidy(test_tdm)
+
+
+#let us test the first document
+doc_test1<- filter(tidy_test,document==c("001.txt"))
+
+
+#get terms for model, remove the class name column(since it is just to identify the class of doc)
+
+terms <- colnames(train_data)[-1]
+
+#format and prepare the test dataframe so that it can be compartible with model
+
+ n = rep(0, length(terms))
+ s =  terms  
+ d <- rep("doc1",length(terms))
+df1 = data.frame(n, s,d, stringsAsFactors = FALSE) 
+
+
+
+
+ n = rep(1, nrow(doc_test1))
+ s = doc_test1$term 
+df2 = data.frame(n, s) 
+
+result<-merge(x = df1, y = df2, by = "s", all.x = TRUE)
+result[is.na(result)] <-0
+m_result <-mutate(result, z =n.x+n.y)
+m_result2<- m_result[,c(-2,-4)]
+wide_test <- spread(m_result2, s, z, fill = 0)
+
+
+predict(svm_model, newdata = wide_test, type = "class")
+
+```
+
