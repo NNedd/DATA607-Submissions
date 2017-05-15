@@ -555,7 +555,7 @@ tweetsData <- cbind(Tweetsdf, sentimentdf)
 ##Finding Similar Movies according to Genre
 
 ```{r findsimilar, eval=TRUE}
-findmovies <- tweetsData[1:10,]
+findmovies <- tweetsData[1,]
 
 lengthin <- nrow(findmovies)
 lengthmov <- nrow(movieData)
@@ -705,49 +705,49 @@ movie_Scores_df %>%
   top_n(n = 3, wt = movies_Scores)
 
 
-#Second Movie
-movies_names <- alltop10[11:20,]
-  movies_Scores <-vector(mode="numeric", length=length(movies_names))
-
-
-#Initalize array
-movies_Scores <-vector(mode="numeric", length=length(movies_names))
-
-for(i in 1:length(movies_names))
-{
-  movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
-}
-
-movie_Scores_df <- rbind(movies_names, movies_Scores)
-
-
-# Get top 3 movies
-
-movie_Scores_df %>%
-  top_n(n = 3, wt = movies_Scores)
-
-
-#Third Movie
-movies_names <- alltop10[11:20,]
-  movies_Scores <-vector(mode="numeric", length=length(movies_names))
-
-
-#Initalize array
-movies_Scores <-vector(mode="numeric", length=length(movies_names))
-
-for(i in 1:length(movies_names))
-{
-  movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
-}
-
-movie_Scores_df <- rbind(movies_names, movies_Scores)
-
-
-# Get top 3 movies
-
-movie_Scores_df %>%
-  top_n(n = 3, wt = movies_Scores)
-
+# #Second Movie
+# movies_names <- alltop10[11:20,]
+#   movies_Scores <-vector(mode="numeric", length=length(movies_names))
+# 
+# 
+# #Initalize array
+# movies_Scores <-vector(mode="numeric", length=length(movies_names))
+# 
+# for(i in 1:length(movies_names))
+# {
+#   movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
+# }
+# 
+# movie_Scores_df <- rbind(movies_names, movies_Scores)
+# 
+# 
+# # Get top 3 movies
+# 
+# movie_Scores_df %>%
+#   top_n(n = 3, wt = movies_Scores)
+# 
+# 
+# #Third Movie
+# movies_names <- alltop10[11:20,]
+#   movies_Scores <-vector(mode="numeric", length=length(movies_names))
+# 
+# 
+# #Initalize array
+# movies_Scores <-vector(mode="numeric", length=length(movies_names))
+# 
+# for(i in 1:length(movies_names))
+# {
+#   movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
+# }
+# 
+# movie_Scores_df <- rbind(movies_names, movies_Scores)
+# 
+# 
+# # Get top 3 movies
+# 
+# movie_Scores_df %>%
+#   top_n(n = 3, wt = movies_Scores)
+# 
 
 
 ```
