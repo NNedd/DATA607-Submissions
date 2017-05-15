@@ -1,0 +1,765 @@
+---
+title: "Movie Recommender - Twitter and MovieLens"
+author: "N Obi-Eyisi & N Nedd"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+#Setup environment
+```{r setup, include=TRUE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if("tidytext" %in% rownames(installed.packages()) == FALSE) {install.packages("tidytext")}
+library(tidytext)
+if("rpart" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart")}
+library(rpart)
+if("tidyr" %in% rownames(installed.packages()) == FALSE) {install.packages("tidyr")}
+library(tidyr)
+if("dplyr" %in% rownames(installed.packages()) == FALSE) {install.packages("dplyr")}
+library(dplyr)
+if("tm" %in% rownames(installed.packages()) == FALSE) {install.packages("tm")}
+library(tm)
+if("rpart.plot" %in% rownames(installed.packages()) == FALSE) {install.packages("rpart.plot")}
+library(rpart.plot)
+if("e1071" %in% rownames(installed.packages()) == FALSE) {install.packages("e1071")}
+library(e1071)
+if("class" %in% rownames(installed.packages()) == FALSE) {install.packages("class")}
+library(class)
+if("stringr" %in% rownames(installed.packages()) == FALSE) {install.packages("stringr")}
+library(stringr)
+if("nnet" %in% rownames(installed.packages()) == FALSE) {install.packages("nnet")}
+library(nnet)
+if("wordcloud" %in% rownames(installed.packages()) == FALSE) {install.packages("wordcloud")}
+library(wordcloud)
+if("stringi" %in% rownames(installed.packages()) == FALSE) {install.packages("stringi")}
+library(stringi)
+if("twitteR" %in% rownames(installed.packages()) == FALSE) {install.packages("twitteR")}
+library(twitteR)
+if("ROAuth" %in% rownames(installed.packages()) == FALSE) {install.packages("ROAuth")}
+library(ROAuth)
+if("xtable" %in% rownames(installed.packages()) == FALSE) {install.packages("xtable")}
+library(xtable)
+if("DT" %in% rownames(installed.packages()) == FALSE) {install.packages("DT")}
+library(DT)
+if("base64enc" %in% rownames(installed.packages()) == FALSE) {install.packages("base64enc")}
+library(base64enc)
+if("ggplot2" %in% rownames(installed.packages()) == FALSE) {install.packages("ggplot2")}
+library(ggplot2)
+```
+
+
+#About the project
+This project seeks to build a movie recommender that takes into consideration the overall sentiment about the movies on twitter. One source of data will be the Movielens database (https://grouplens.org/datasets/movielens/), which consists of over 1 million movie reviews, ratings and user information. The other source of data will be mined twitter feeds about movies in the database. This project could be beneficial to a movie service websites like Movielens, Fandango or Netflix, where they will be able to improve the ranking algorithm for user based on real time twitter sentiments.
+
+#Workflow
+The Cross Industry Standard Process for Data Minining (CRISP-DM) will be the workflow standard at the basis of completion of this project.  CRISP Workflow can be described as follows:
+
+![Dataminig Process Diagram](CRISP-DM_Process_Diagram.png)
+
+#Understanding the Business Case
+There are many recommender systems for movies that use either information about the user or information about the users historical actions.  In cases where there is limited information a recommender has to make use of the scarce resources available to it.  In this case a tweet is used to derive a recommender from an established database along with popularity on twitter.
+
+
+#Understanding the Data
+The data form this project will be taken from different sources.
+
+##FlimReviewIn140 Twitter Feed
+FilmRevewIn140 (https://twitter.com/filmreviewin140?lang=en)is a twitter feed that contains approximately 350 tweets, mostly giving movie reviews.  This data will be used as the starting point (the initial tweet).  It will be assumed that these tweets are in isolation of each other (and not necessarily tweeted by the same person).
+
+The use of twitter requires the initialisation of the consumerKey, ConsumerSecret, accessToken and accessTokenSecret which are assigned to a developer when they register to use the twitter API and register an application. 
+
+```{r setupkeys, echo=FALSE}
+consumerKey = "EcMaLIydRm6jEr3fws7JqtLxX"
+consumerSecret = "n3qTYOR4N0YAdZzstm7A4eKq51iyn73XhohX4R3zeUYEiOui20"
+accessToken = "862671453082320896-b1KMTD7JVQ8ugqKYczuTlePhfGsaPm3"
+accessTokenSecret = "cqtDYbDGyBMEQXI41ZsovtsI7YbJmHZJxnERnzR6oYKSj"
+```
+
+Now we can load the reviews from twitter.
+
+```{r loadreviews, eval=TRUE}
+options(httr_oauth_cache=FALSE)
+
+setup_twitter_oauth(consumerKey, consumerSecret, accessToken, accessTokenSecret)
+
+allTweets <- userTimeline('FilmReviewIn140', n = 346)
+head(allTweets)
+allTweetsdf <- do.call("rbind", lapply(allTweets, as.data.frame))
+
+head(allTweetsdf)
+
+```
+
+The tweets are for the most part in the following format:
+
+Name of Movie (year) - Review | Grade
+
+They can now be accessed by the allTweetsdf dataframe
+
+
+
+
+##Large Movie Review Dataset from Standard University
+A movie review dataset provided by Stanford University (http://ai.stanford.edu/~amaas/data/sentiment/) was used to train the model for sentiment analysis.  
+
+The data was loaded as follows: 
+
+```{r loadtraindata, eval=TRUE}
+#Setup paths
+neg_path <- "train/neg/"
+pos_path <- "train/pos/"
+
+neg_docs <- dir(neg_path)
+pos_docs <- dir(pos_path)
+
+get.msg <- function(path)
+{
+
+  con <- file(path, open = "rt")
+  msg <- readLines(con)
+  close(con)
+  return(paste(msg, collapse = "\n"))
+}
+
+all_neg <- sapply(neg_docs, function (p) get.msg(paste(neg_path,p,sep="")))
+all_pos <- sapply(pos_docs, function (p) get.msg(paste(pos_path,p,sep="")))
+
+```
+
+Each file basically contains the text of a movie review.  These are marked as a negative/positive review based on the folder in which they are located.  all_neg is a character array of all negative reviews, and all_pos is a character array of all positive reviews.
+
+
+##MovieLens Data Set
+The movielens dataset(https://grouplens.org/datasets/movielens/) will be use for movie searching as a basis for the recommendation.
+
+
+**Loading the Dataset:**
+Code adapted from: https://redroy44.github.io/2017/02/03/movielens/
+
+
+```{r loadmovies, eval=TRUE}
+url <- "http://files.grouplens.org/datasets/movielens/"
+dataset <- "ml-latest"
+data_folder <- "movielensdata"
+archive_type <- ".zip"
+
+# Choose dataset version
+dataset_zip <- paste0(dataset, archive_type)
+
+# Download the data and unzip it
+if (!file.exists(file.path(data_folder, dataset_zip))) {
+  download.file(paste0(url, dataset_zip), file.path(data_folder, dataset_zip))
+}
+unzip(file.path(data_folder, dataset_zip), exdir = data_folder, overwrite = F)
+
+# Display the unzipped files
+list.files('data/', recursive=T)
+
+
+
+
+movieData <- read.csv("movielensdata/ml-latest/movies.csv", stringsAsFactors = FALSE)
+ratingsData <- read.csv("movielensdata/ml-latest/ratings.csv", stringsAsFactors = FALSE)
+
+```
+
+movieData and ratingsData contains the data from the movie.csv file (information about the movie) and the ratings.csv file (information about ratings)
+
+
+#Data Preparation
+
+##FlimReviewIn140
+
+The collection from twitter returned a frame with 16 variables.  For this purposes of this project, only the first variable (text) was of interest.
+
+This variable contains the entire tweet in the format:
+
+Name of Movie (optional year) - Review | Grade
+
+This had to be split into three separate variables.
+
+```{r twitterprep, eval = TRUE}
+#Extract Movie Names:  All characters up until " - " (with spaces)
+movieNames <- str_extract(allTweetsdf$text, ".+?(?= \\- )")  
+#movieNames <- str_replace(movieNames, "\\(.*?\\)", "")
+movieNames <- str_trim(movieNames, side="both")
+#Convert to dataframe
+movieNamesdf <- data.frame(movieNames, row.names = NULL, stringsAsFactors = FALSE)
+
+
+#Extract Movie Review
+movieReviews <- str_extract(allTweetsdf$text, "\\- ([^|]*)")
+movieReviews <- str_replace(movieReviews, "-", "")
+movieReviews <- str_trim(movieReviews, side="both")
+movieReviewsdf <- data.frame(movieReviews, row.names = NULL, stringsAsFactors = FALSE)
+
+#Extract Grade
+movieGrades <- str_extract(allTweetsdf$text, "([[:upper:]]{1}[+|-]{0,1})$")
+movieGrades <- str_trim(movieGrades, side="both")
+movieGradesdf <- data.frame(movieGrades, row.names = NULL, stringsAsFactors = FALSE)
+
+#Merge Data frames
+Tweetsdf <- bind_cols(movieNamesdf, movieReviewsdf, movieGradesdf)
+Tweetsdf <- na.omit(Tweetsdf)
+
+datatable(Tweetsdf)
+
+```
+
+###Exploration of the Data:
+
+Distribution of the Grades:
+
+```{r exploretwitter, eval=TRUE}
+ggplot (Tweetsdf, aes(x=movieGrades)) + geom_bar()
+```
+
+There seems to be more B ratings that the other options, followed by C (all with at least 20 occurrences).  Comparatively, there are only a few A, D and F ratings in this dataset.
+
+
+##Stanford's Large Movie Review Dataset
+
+The data was converted to a corpus for text processing.
+Both TermDocument and DocumentTerm Matrices were generated from the data and sparse terms removed
+```{r prepLMRD, eval = TRUE}
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE)
+
+
+neg_corpus <- Corpus(VectorSource(all_neg))
+neg_corpus <- tm_map(neg_corpus, stripWhitespace)
+neg_corpus <- tm_map(neg_corpus, content_transformer(tolower))
+neg_corpus <- tm_map(neg_corpus, stemDocument)
+neg_tdm <- TermDocumentMatrix(neg_corpus,control)
+neg_dtm <- DocumentTermMatrix(neg_corpus, control)
+
+#remove sparse items
+neg_tdm2<-removeSparseTerms(neg_tdm,0.95)
+
+pos_corpus <- Corpus(VectorSource(all_pos))
+pos_corpus <- tm_map(pos_corpus, stripWhitespace)
+pos_corpus <- tm_map(pos_corpus, content_transformer(tolower))
+pos_corpus <- tm_map(pos_corpus, stemDocument)
+pos_tdm <- TermDocumentMatrix(pos_corpus,control)
+pos_dtm <- DocumentTermMatrix(pos_corpus, control)
+
+#remove sparse items
+pos_tdm2<-removeSparseTerms(pos_tdm,0.95)
+
+```
+
+###Exploring the Large Movie Review Dataset
+
+Word Cloud for Negative Corpus
+```{r, visualise-neg, eval=TRUE}
+wcneg <- tm_map(neg_corpus, removeWords, stopwords("english"))
+wordcloud(wcneg, min.freq=2000)
+```
+
+Word Cloud for Positive Corpus
+```{r, visualise-pos, eval=TRUE}
+wcpos <- tm_map(pos_corpus, removeWords, stopwords("english"))
+wordcloud(wcpos, min.freq=2000)
+```
+
+
+###Convert corpus to tidy format
+
+```{r tidy-corpus, eval=TRUE}
+tidy_neg <- tidy(neg_tdm2)
+head(tidy_neg)
+tidy_pos<- tidy(pos_tdm2)
+head(tidy_pos)
+```
+
+###Change to Wide Format
+```{r wide-data, eval=TRUE}
+wide_neg <- spread(tidy_neg, term, count, fill = 0)
+head(wide_neg)
+wide_pos <- spread(tidy_pos, term, count, fill = 0)
+head(wide_pos)
+```
+
+###Insert column to mark class of document
+```{r insert-column, eval=TRUE}
+neg_class <- wide_neg %>% 
+    mutate(class = "neg")
+
+pos_class <- wide_pos%>% 
+    mutate(class = "pos")
+
+```
+
+###Merge pos and neg data
+```{r merge-data, eval=TRUE}
+#Merge
+all_data <- bind_rows(neg_class, pos_class)
+#Rearrance columns
+all_data <- select(all_data, class, everything())
+#Set N/A to 0
+all_data[is.na(all_data)] <- 0
+#Make class variable a factor variable
+all_data$class <- as.factor(all_data$class)
+#Remove the document names
+all_data <- subset(all_data, select = -c(document))
+head(all_data)
+
+```
+
+##The MovieLens Dataset
+
+The ratings data was summarised to display average rating for each movie in the database.
+
+```{r exploremovielens, eval=TRUE}
+ratingsData2 <- ratingsData %>% 
+  group_by(movieId) %>% 
+  summarise (
+    n = n(),
+    avgRating = mean(rating)
+    
+  )
+
+
+
+movieData$title <- str_trim(movieData$title, side="both")
+
+```
+
+
+###Exploring Movielens
+
+**The Movies:**
+
+```{r exploremovies}
+movieData2 <- group_by(movieData, genres)
+movieData2 <- summarise(movieData2, count=n())
+movieData2 <- arrange(movieData2, desc(count))
+ggplot(movieData2[1:20,], aes(x=count, y = genres))+geom_point()
+```
+
+The graph above only shows the top 20 genres for clarity.  Drama followed by Comedy then Documentary and the top three genres represented in the Database.  It should be noted that a little over 2000 records have no genres listed. 
+
+It should be noted here that movies can have multiple genres (which were counted as a genre in itself).
+
+
+#MODELLING
+
+First Step is to train a sentiment analysis model:
+
+##Sentiment Analysis
+
+###Visualise the Training and Test sets
+```{r visualise-sets, eval=TRUE}
+table(all_data$class)
+plot(all_data$class, main = "Training Data Set")
+
+
+```
+###Split into Training and Test Sets
+
+```{r  train-test}
+set.seed(1800)
+index <- 1:nrow(all_data)
+#Perform a 60/40 split
+trainIndex <- sample(index, trunc(length(index) * 0.6))
+train_data <- all_data[trainIndex,]
+test_data <- all_data[-trainIndex,]
+
+
+```
+
+###Classification - Support Vector Machine (SVM)
+
+SVMs is a non-probabilistic linear classifier
+
+```{r classify-svm, eval=TRUE}
+pc <- proc.time()
+svm_model <- svm(class ~ ., method = "class", data = train_data)
+proc.time() - pc
+
+
+
+summary(svm_model)
+```
+###Evaluation of SVM
+
+```{r evaluate-svm, eval=TRUE}
+svm_predict <- predict(svm_model, newdata = test_data, type = "class")
+table(`Actual Class` = test_data$class, `Predicted Class` = svm_predict)
+```
+
+###Accuracy of SVM
+
+```{r accuracy-svm, eval=TRUE}
+svm_error <- sum(test_data$class != svm_predict)/nrow(test_data)
+print(paste0("Accuary (Precision): ", 1 - svm_error))
+```
+
+##Applying the sentiment analysis model trained.
+
+```{r}
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE)
+
+
+test_corpus <- Corpus(VectorSource(as.character(Tweetsdf$movieReviews)))
+test_corpus <- tm_map(test_corpus, stripWhitespace)
+test_corpus <- tm_map(test_corpus, content_transformer(tolower))
+test_corpus <- tm_map(test_corpus, stemDocument)
+
+test_tdm <- TermDocumentMatrix(test_corpus,control)
+
+
+
+tidy_test <- tidy(test_tdm)
+
+#get terms for model, remove the class name column(since it is just to identify the class of doc)
+
+sentimentdf <- as.data.frame(matrix(nrow=nrow(Tweetsdf)))
+names(sentimentdf) <- c("Sentiment")
+
+terms <- colnames(train_data)[-1]
+ n = rep(0, length(terms))
+ s =  terms  
+ d <- rep(0,length(terms))
+df1 = data.frame(n, s,d, stringsAsFactors = FALSE) 
+
+  
+i <- 1
+for(i in 1:nrow(Tweetsdf))
+{
+  doc_test<- filter(tidy_test,document==i)
+  #format and prepare the test dataframe so that it can be compartible with model
+
+
+
+#format and prepare the test dataframe so that it can be compartible with model
+
+#  n = rep(0, length(terms))
+#  s =  terms  
+#  d <- rep("doc1",length(terms))
+# df1 = data.frame(n, s,d, stringsAsFactors = FALSE) 
+
+ n = rep(i, nrow(doc_test))
+ s = doc_test$term 
+df2 = data.frame(n, s) 
+
+result<-merge(x = df1, y = df2, by = "s", all.x = TRUE)
+result[is.na(result)] <-0
+m_result <-mutate(result, z =n.x+n.y)
+m_result2<- m_result[,c(-2,-4)]
+wide_test <- spread(m_result2, s, z, fill = 0)
+
+
+
+sentimentdf$Sentiment[i] <- predict(svm_model, newdata = wide_test, type = "class")
+}
+```
+
+###Evaluating the accuracy of the sentiments
+
+```{r evalaccuracy, eval=TRUE}
+char_grades <- as.character(str_extract(Tweetsdf$movieGrades, '[A-Za-z]'),stringsAsFactors = FALSE)
+
+#change grade of F to FF because of an error generated due to 'F' conflict with function name in R
+char_grades[which(char_grades=='F')] <- "FF"
+
+grade_sent<-as.character(sapply(char_grades, switch, 
+         'A' = 'pos', 
+         'B' = 'pos',
+         'C' = 'pos', 
+         'D' = 'neg',
+         'E' = 'neg',
+         "FF" = 'neg'))
+
+Tweetsdf2 <- cbind(Tweetsdf,grade_sent)
+
+
+sentiment_functn <- function(all_test,train_data)
+{
+control <- list(stopwords=TRUE, removePunctuation=TRUE,removeNumbers=TRUE)
+
+
+test_corpus <- Corpus(VectorSource(all_test))
+test_corpus <- tm_map(test_corpus, stripWhitespace)
+test_corpus <- tm_map(test_corpus, content_transformer(tolower))
+test_corpus <- tm_map(test_corpus, stemDocument)
+
+test_tdm <- TermDocumentMatrix(test_corpus,control)
+
+
+
+tidy_test <- tidy(test_tdm)
+
+
+
+doc_test1<- tidy_test 
+
+#get terms for model, remove the class name column(since it is just to identify the class of doc)
+
+terms <- colnames(train_data)[-1]
+
+#format and prepare the test dataframe so that it can be compartible with model
+
+ n = rep(0, length(terms))
+ s =  terms  
+ d <- rep("doc1",length(terms))
+df1 = data.frame(n, s,d, stringsAsFactors = FALSE) 
+
+
+
+
+ n = rep(1, nrow(doc_test1))
+ s = doc_test1$term 
+df2 = data.frame(n, s) 
+
+result<-merge(x = df1, y = df2, by = "s", all.x = TRUE)
+result[is.na(result)] <-0
+m_result <-mutate(result, z =n.x+n.y)
+m_result2<- m_result[,c(-2,-4)]
+wide_test <- spread(m_result2, s, z, fill = 0)
+
+pred<-predict(svm_model, newdata = wide_test, type = "class")
+
+return(as.character(pred, stringsAsFactors = FALSE))
+
+}
+
+sent_pred <- vector("character",length=nrow(Tweetsdf2))
+for (i in 1:nrow(Tweetsdf2))
+{
+  sent_pred[i] <- sentiment_functn( Tweetsdf2[i,2], train_data)
+}
+
+Tweetsdf3 <-cbind(Tweetsdf2,sent_pred)
+
+comparison <- Tweetsdf3$grade_sent == Tweetsdf3$sent_pred
+
+Tweetsdf4<-cbind(Tweetsdf3 ,comparison)
+
+counts <- table(Tweetsdf4$comparison)
+barplot(counts, main="Analysis of Movie SVM Prediction model with Twitter reviews", 
+  	xlab="Boolean Comparison" , ylab="Number of Matches")
+
+
+
+```
+
+Now the sentiments will be merged with the twitter data:
+
+```{r mergedata, eval=TRUE}
+tweetsData <- cbind(Tweetsdf, sentimentdf)
+```
+
+##Finding Similar Movies according to Genre
+
+```{r findsimilar, eval=TRUE}
+findmovies <- tweetsData[1:10,]
+
+lengthin <- nrow(findmovies)
+lengthmov <- nrow(movieData)
+
+alltop10 <- NULL
+allTopMovies <- NULL
+keepindex <- NULL
+topmovies <- NULL
+indexfound <- 0
+
+i <- 1
+j <- 1
+
+for (i in 1:lengthin)
+{
+  moviefound <- toupper(findmovies$movieNames[i])
+  for (j in 1:lengthmov)
+  {
+    moviein <- toupper(movieData$title[j])
+    if(moviefound == moviein){
+      indexfound <- j
+      
+    }
+    else
+    {
+      moviein2 <- str_replace(moviein, "\\(.*?\\)", "")
+      moviein2 <- str_trim(moviein2, "both")
+      if(moviefound == moviein2){
+        indexfound <- j
+      }
+      else if(str_detect(moviein2, "^.*,\\s\\bTHE$")){
+          check <- 1
+          moviein3 <- gsub(", THE", "", moviein2)
+          moviein4 <- paste("THE", moviein3, sep = " ")
+          if(moviein4 == moviefound){
+            indexfound <- j
+            
+          }
+      }
+      else{
+          indexfound1 <- 0
+      }
+    }
+    j <- j+1
+  }
+    
+  if (indexfound != 0)
+  {
+    if(findmovies$Sentiment[i] == 2)
+    {
+      genre <- movieData$genres[indexfound]
+      movielist <- movieData[which(movieData$genres == genre), ]
+      for (k in 1:nrow(movielist))
+      {
+        movierating <- ratingsData2[which(ratingsData2$movieId == movielist$movieId[k]),]
+        topmovies <-cbind(Movie = movielist$title[k], Rating = movierating$avgRating[1])
+        allTopMovies <- rbind(allTopMovies, topmovies)
+        test<- 1
+      }
+    }
+    else
+    {
+      genre <- movieData$genres[indexfound]
+      movielist <- movieData[which(movieData$genres != genre), ]
+      for (k in 1:nrow(movielist))
+      {
+        movierating <- ratingsData2[which(ratingsData2$movieId == movielist$movieId[k]),]
+        topmovies <-cbind(Movie = movielist$title[k], Rating = movierating$avgRating[1])
+        allTopMovies <- rbind(allTopMovies, topmovies)
+        test1 <- 2
+      }
+    }
+  }
+  if(indexfound == 0)
+  {
+    #genre <- movieData$genres[indexfound]
+    movielist <- movieData
+    for (k in 1:nrow(movielist))
+    {
+      movierating <- ratingsData2[which(ratingsData2$movieId == movielist$movieId[k]),]
+      topmovies <-cbind(Movie = movielist$title[k], Rating = movierating$avgRating[1])
+      allTopMovies <- rbind(allTopMovies, topmovies)
+      test2 <- 3
+    }
+  }
+  TopMoviesdf <- as.data.frame(allTopMovies)
+  TopMoviesdf <- arrange(TopMoviesdf, desc(Rating))
+  TopMoviesdf <- subset(TopMoviesdf, Movie != movieData$title[indexfound])
+  top10movies <- TopMoviesdf[1:10,]
+  alltop10 <- rbind(alltop10, top10movies)
+  indexkeep <- as.data.frame(rep(i,10))
+  keepindex <- rbind(keepindex, indexkeep)
+  indexfound <- 0
+  i <- i+1
+}
+
+
+
+```
+
+##Get top Movies from Twitter
+
+```{r gettop3, eval=TRUE}
+
+movie_score_fn <- function(moviename_var)
+{
+  movie_search <- str_c("I rated ",moviename_var," #IMDb")
+  
+  
+  twitter_results <- searchTwitter(movie_search, n=100, lang="en", since="2013-08-20")
+  
+  twitter_resultsdf <- do.call("rbind", lapply(twitter_results, as.data.frame))
+  twitter_reviews <-twitter_resultsdf$text
+  if(length(twitter_reviews)==0){
+    return (NA)
+  }else {
+    a <- str_extract(twitter_reviews, '[0-9]/[0-9][0-9]')
+    
+    #Filter out any NA values from the extract
+    a <- a[is.na(a)==FALSE]
+    
+    ratings<-as.numeric(substr(a,1,1))
+    score <- sum(ratings)/length(ratings)
+    return (score)
+  }
+}
+
+#First Movie
+  movies_names <- alltop10[1:10,]
+  movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+
+#Initalize array
+movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+for(i in 1:length(movies_names))
+{
+  movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
+}
+
+movie_Scores_df <- rbind(movies_names, movies_Scores)
+
+
+# Get top 3 movies
+
+movie_Scores_df %>%
+  top_n(n = 3, wt = movies_Scores)
+
+
+#Second Movie
+movies_names <- alltop10[11:20,]
+  movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+
+#Initalize array
+movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+for(i in 1:length(movies_names))
+{
+  movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
+}
+
+movie_Scores_df <- rbind(movies_names, movies_Scores)
+
+
+# Get top 3 movies
+
+movie_Scores_df %>%
+  top_n(n = 3, wt = movies_Scores)
+
+
+#Third Movie
+movies_names <- alltop10[11:20,]
+  movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+
+#Initalize array
+movies_Scores <-vector(mode="numeric", length=length(movies_names))
+
+for(i in 1:length(movies_names))
+{
+  movies_Scores[i] <- as.numeric(movie_score_fn(movies_names[i]))
+}
+
+movie_Scores_df <- rbind(movies_names, movies_Scores)
+
+
+# Get top 3 movies
+
+movie_Scores_df %>%
+  top_n(n = 3, wt = movies_Scores)
+
+
+
+```
+
+#CONCLUSION
+
+We set out to create a movie recommender system based on genre of the move, and we were able to accomplish this with the help of twitter reviews. One of the challenges faced when extracting data from twitter is the fact that the data is only one week old and we were only able to get a limited sample size. Resorting to specific twitter accounts with structured tweet format was pivotal to accomplishing any significant analysis. The SVM sentiment model classified the tweets fairly when compared the letter grades assigned to the movie reviews. For any movie with a positive review from twitter that went through the Movie Lens database, we were able to find the top 10 genres that were similar to the movie genre. Once we had that, we analyzed the latest reviews of those top 10 movies, then stream lined it to a top 3 movies. This project could be beneficial to a movie service websites like Movielens, Fandango or Netflix, where they will be able to improve the ranking algorithm for user based on real time twitter sentiments.
+
+#REFERENCES
+
+Andrew L. Maas, Raymond E. Daly, Peter T. Pham, Dan Huang, Andrew Y. Ng, and Christopher Potts. (2011). Learning Word Vectors for Sentiment Analysis. The 49th Annual Meeting of the Association for Computational Linguistics (ACL 2011).
+
+F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History and Context. ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4, Article 19 (December 2015), 19 pages. DOI=http://dx.doi.org/10.1145/2827872
+
+
